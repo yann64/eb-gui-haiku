@@ -7,15 +7,41 @@ cross-toolkit GUI API, managed with `ebpm`.
 ## Status
 
 Full contract (`Application`/`Window`/`StatusBar`/`Timer`/`Menu`/
-`Toolbar`/`Action`), implementing every function in `eb-gui`'s own
-contract by calling into
+`Toolbar`/`Action`), plus Widget/Layout Round 1 (`GuiButton`/
+`GuiLabel`/`GuiEntry` + `GuiBox`/`GuiGrid`), implementing every
+function in `eb-gui`'s own contract by calling into
 [`eb-haiku`](https://github.com/yann64/eb-haiku). Needs **no native
 code of its own at all** - every native piece this adapter needed
 (window title/geometry/enable/modal, a reusable per-object callback
-target, a `BMessageRunner`-based timer) was added to `eb-haiku` itself
-(`v0.14.0`/`v0.14.1`) as prerequisite work, exactly the same "extend
-the base binding first" pattern `eb-gui-gtk4`/`eb-gui-qt6` each
-followed for their own toolkits.
+target plus its button/menu-item/text-field/application-level
+attachment points, a `BMessageRunner`-based timer) was added to
+`eb-haiku` itself (`v0.14.0`-`v0.14.3`) as prerequisite work, exactly
+the same "extend the base binding first" pattern `eb-gui-gtk4`/
+`eb-gui-qt6` each followed for their own toolkits.
+
+**`GuiButtonConnectClicked`/`GuiEntryConnectChanged` attach to the
+APPLICATION's own `BLooper`** (`HApplicationAddHandler`, `eb-haiku`
+v0.14.3+), unlike `GuiMenuAddAction`/`GuiToolBarAddAction`'s own
+window-scoped `HHandler` - this contract's widget-connect functions get
+no window reference at all (a button is typically wired up before
+being added to any layout), so there's nowhere window-scoped to attach
+to yet. A real, worth-knowing consequence: real `BApplication` runs its
+message loop on the SAME thread that calls `GuiApplicationRun`, unlike
+a `BWindow`'s own separate thread (which already runs pre-`Run()`) - so
+a widget-level callback genuinely cannot fire until `GuiApplicationRun`
+is actually executing, unlike a menu/toolbar action's own callback
+(see `examples/verify`'s own comment on this for the concrete
+consequence: no safe point exists in a script to fire-and-check a
+button click outside of `Run()` itself, unlike actions).
+
+`GuiBox`/`GuiGrid` need the same holder-view design `eb-gui-qt6`
+needed for its own `BoxLayout`/`GridLayout`, for the identical
+reason: a real `HGroupLayout`/`HGridLayout` is NOT itself a `BView`,
+unlike GTK4's own `Box`/`Grid` widgets (see `eb-gui`'s own README on
+this asymmetry) - `GuiBox`/`GuiGrid.handle` here is really a small
+holder `HView` with the real layout applied via `HViewSetLayout`, the
+real layout tracked separately via this adapter's own generic
+association table.
 
 **Why this adapter exists at all, given GTK4/Qt6 already run
 unmodified on Haiku** (confirmed separately, see `eb-gui`'s own
@@ -151,6 +177,30 @@ app = NewGuiApplication("application/x-vnd.you.yourapp")
 
 DIM win AS GuiWindow
 win = NewGuiWindow(app, "Hello", 320, 240)
+
+DIM box AS GuiBox
+box = NewGuiBox(1, 8)   ' 1 = vertical
+
+DIM lbl AS GuiLabel
+lbl = NewGuiLabel("Type something, then click Go")
+CALL GuiBoxAddChild(box, lbl.handle)
+
+DIM entry AS GuiEntry
+entry = NewGuiEntry("")
+CALL GuiBoxAddChild(box, entry.handle)
+
+SUB OnGo(userData AS ANY PTR)
+    DIM e AS GuiEntry
+    e.handle = userData
+    CALL GuiLabelSetText(lbl, GuiEntryGetText(e))
+END SUB
+
+DIM btn AS GuiButton
+btn = NewGuiButton("Go")
+CALL GuiButtonConnectClicked(btn, @OnGo, entry.handle)
+CALL GuiBoxAddChild(box, btn.handle)
+
+CALL GuiWindowSetContent(win, box.handle)
 CALL GuiWindowShow(win)
 
 CALL GuiApplicationRun(app)
@@ -176,8 +226,14 @@ any more than on `eb-qt6`.
   genuinely reaching a connected handler for both a menu action and a
   toolbar action (confirmed asynchronous - see "Real capability
   differences" above), `GuiWindowToolBar` returning the identical
-  handle on repeated calls, and a `GuiTimer`-driven `GuiApplicationQuit`
-  exiting `GuiApplicationRun` promptly.
+  handle on repeated calls, `GuiEntrySetText`/`GetText` round-tripping
+  through a `GuiGrid` nested inside a `GuiBox`, `GuiWindowSetContent`
+  composing with StatusBar/MenuBar/ToolBar without crashing, and a
+  `GuiTimer`-driven `GuiApplicationQuit` exiting `GuiApplicationRun`
+  promptly.
+- `examples/widgets_form.bas` - a `GuiBox` containing a `GuiLabel` +
+  `GuiEntry` + `GuiButton`, clicking the button reads the entry and
+  updates the label (screenshot-verified live on real Haiku hardware).
 
 ## See also
 

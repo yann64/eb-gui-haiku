@@ -122,6 +122,46 @@ PRINT "toolbar action enabled after disable: ", GuiActionIsEnabled(toolAction)
 CALL GuiActionSetEnabled(toolAction, 1)
 PRINT "toolbar action enabled after re-enable: ", GuiActionIsEnabled(toolAction)
 
+' 6. Widget/Layout Round 1 - GuiBox/GuiGrid nesting (a GuiGrid inside a
+' GuiBox, via each's own holder-view mechanism - see this adapter's own
+' src/lib.bas top comment), GuiEntry text round-trip, and
+' GuiWindowSetContent appending into the shared content layout
+' alongside StatusBar/MenuBar/ToolBar. GuiButtonConnectClicked/
+' GuiEntryConnectChanged are only confirmed "connects without
+' crashing" here: their own HHandler attaches to the APPLICATION's own
+' BLooper (no window is known at connect time), and real BApplication
+' runs its message loop on the SAME thread that calls
+' GuiApplicationRun - unlike a BWindow's own separate thread, which
+' already runs pre-Run() (why the menu/toolbar action checks above can
+' fire-and-check before Run() at all) - so there is no safe point in
+' this script to fire one and observe the result outside of Run()
+' itself.
+DIM widgetsBox AS GuiBox
+widgetsBox = NewGuiBox(1, 4)
+
+DIM formGrid AS GuiGrid
+formGrid = NewGuiGrid()
+DIM nameLbl AS GuiLabel
+nameLbl = NewGuiLabel("Name:")
+CALL GuiGridAttach(formGrid, nameLbl.handle, 0, 0, 1, 1)
+DIM nameEntry AS GuiEntry
+nameEntry = NewGuiEntry("")
+CALL GuiGridAttach(formGrid, nameEntry.handle, 1, 0, 1, 1)
+CALL GuiBoxAddChild(widgetsBox, formGrid.handle)
+
+CALL GuiEntrySetText(nameEntry, "hello")
+PRINT "entry text round-trip: ", GuiEntryGetText(nameEntry)
+CALL GuiEntryConnectChanged(nameEntry, @OnActionTriggered, 0)
+PRINT "entry connect changed did not crash"
+
+DIM goBtn AS GuiButton
+goBtn = NewGuiButton("Go")
+CALL GuiButtonConnectClicked(goBtn, @OnActionTriggered, 0)
+CALL GuiBoxAddChild(widgetsBox, goBtn.handle)
+
+CALL GuiWindowSetContent(sbWin, widgetsBox.handle)
+PRINT "GuiWindowSetContent composed with StatusBar/MenuBar/ToolBar without crashing"
+
 ' 5. GuiTimer, and (via its own callback) GuiApplicationQuit stopping
 ' GuiApplicationRun - the same real running-loop quit proof eb-gtk4/
 ' eb-qt6's own equivalents use.

@@ -137,9 +137,17 @@ FUNCTION EbGuiHaikuIsButtonAction(handle AS ANY PTR) AS INTEGER
     EbGuiHaikuIsButtonAction = 0
 END FUNCTION
 
+''' Tracked so widget-level GuiButtonConnectClicked/GuiEntryConnectChanged
+''' (which the contract gives no window reference to) have somewhere to
+''' attach their own per-object HHandler - eb-gui's own model has
+''' exactly one GuiApplication per process anyway (matching this whole
+''' framework's own single-application assumption throughout).
+DIM ebGuiHaikuAppHandle AS ANY PTR
+
 FUNCTION NewGuiApplication(appId AS ZSTRING) AS GuiApplication
     DIM realApp AS HApplication
     realApp = HApplicationCreate(appId)
+    ebGuiHaikuAppHandle = realApp.handle
     DIM result AS GuiApplication
     result.handle = realApp.handle
     NewGuiApplication = result
@@ -550,3 +558,145 @@ FUNCTION GuiToolBarAddAction(bar AS GuiToolBar, text AS ZSTRING) AS GuiAction
     result.handle = btn.handle
     GuiToolBarAddAction = result
 END FUNCTION
+
+FUNCTION NewGuiButton(text AS ZSTRING) AS GuiButton
+    DIM realBtn AS HButton
+    realBtn = HButtonCreate(0, 0, 0, 0, "eb-gui-haiku-widget-button", text, 0)
+    DIM result AS GuiButton
+    result.handle = realBtn.handle
+    NewGuiButton = result
+END FUNCTION
+
+SUB GuiButtonSetText(b AS GuiButton, text AS ZSTRING)
+    DIM realBtn AS HButton
+    realBtn.handle = b.handle
+    CALL HButtonSetLabel(realBtn, text)
+END SUB
+
+FUNCTION GuiButtonGetText(b AS GuiButton) AS ZSTRING
+    DIM realBtn AS HButton
+    realBtn.handle = b.handle
+    GuiButtonGetText = HButtonGetLabel(realBtn)
+END FUNCTION
+
+''' A fresh `HHandler`, attached to the APPLICATION's own `BLooper`
+''' (`HApplicationAddHandler`, eb-haiku v0.14.3+) rather than a specific
+''' window's - this contract function gets no window reference at all,
+''' unlike `GuiMenuAddAction`/`GuiToolBarAddAction` (which always know
+''' their owning window via the association table).
+SUB GuiButtonConnectClicked(b AS GuiButton, handler AS ANY PTR, userData AS ANY PTR)
+    DIM realBtn AS HButton
+    realBtn.handle = b.handle
+    DIM realApp AS HApplication
+    realApp.handle = ebGuiHaikuAppHandle
+    DIM h AS HHandler
+    h = HHandlerCreate()
+    CALL HApplicationAddHandler(realApp, h)
+    CALL HButtonSetTarget(realBtn, h)
+    CALL HHandlerSetCallback(h, handler, userData)
+END SUB
+
+FUNCTION NewGuiLabel(text AS ZSTRING) AS GuiLabel
+    DIM realLbl AS HStringView
+    realLbl = HStringViewCreate(0, 0, 0, 0, "eb-gui-haiku-label", text)
+    DIM result AS GuiLabel
+    result.handle = realLbl.handle
+    NewGuiLabel = result
+END FUNCTION
+
+SUB GuiLabelSetText(l AS GuiLabel, text AS ZSTRING)
+    DIM realLbl AS HStringView
+    realLbl.handle = l.handle
+    CALL HStringViewSetText(realLbl, text)
+END SUB
+
+FUNCTION NewGuiEntry(text AS ZSTRING) AS GuiEntry
+    DIM realEntry AS HTextControl
+    realEntry = HTextControlCreate(0, 0, 0, 0, "eb-gui-haiku-entry", "", text, 0)
+    DIM result AS GuiEntry
+    result.handle = realEntry.handle
+    NewGuiEntry = result
+END FUNCTION
+
+SUB GuiEntrySetText(e AS GuiEntry, text AS ZSTRING)
+    DIM realEntry AS HTextControl
+    realEntry.handle = e.handle
+    CALL HTextControlSetText(realEntry, text)
+END SUB
+
+FUNCTION GuiEntryGetText(e AS GuiEntry) AS ZSTRING
+    DIM realEntry AS HTextControl
+    realEntry.handle = e.handle
+    GuiEntryGetText = HTextControlGetText(realEntry)
+END FUNCTION
+
+''' Same application-attached `HHandler` mechanism as
+''' `GuiButtonConnectClicked` above (`HTextControlSetTarget`, eb-haiku
+''' v0.14.2+).
+SUB GuiEntryConnectChanged(e AS GuiEntry, handler AS ANY PTR, userData AS ANY PTR)
+    DIM realEntry AS HTextControl
+    realEntry.handle = e.handle
+    DIM realApp AS HApplication
+    realApp.handle = ebGuiHaikuAppHandle
+    DIM h AS HHandler
+    h = HHandlerCreate()
+    CALL HApplicationAddHandler(realApp, h)
+    CALL HTextControlSetTarget(realEntry, h)
+    CALL HHandlerSetCallback(h, handler, userData)
+END SUB
+
+''' A real `HGroupLayout` is NOT itself a `BView`, unlike GTK4's own
+''' `Box` - so `GuiBox.handle` here is really a small holder `HView`
+''' (created here, with the real layout applied via `HViewSetLayout`),
+''' matching `eb-gui-qt6`'s identical holder-widget shape (see
+''' `eb-gui`'s own README on this asymmetry). The real layout is
+''' tracked separately (the generic association table) so
+''' `GuiBoxAddChild` knows which one to call `HLayoutAddView` on.
+FUNCTION NewGuiBox(orientation AS INTEGER, spacing AS INTEGER) AS GuiBox
+    DIM realLayout AS HGroupLayout
+    realLayout = HGroupLayoutCreate(orientation, spacing)
+    DIM holder AS HView
+    holder = HViewCreate(0, 0, 0, 0, "eb-gui-haiku-box", H_FOLLOW_ALL, 0)
+    CALL HViewSetLayout(holder.handle, realLayout.handle)
+    CALL EbGuiHaikuAssocSet(holder.handle, realLayout.handle)
+    DIM result AS GuiBox
+    result.handle = holder.handle
+    NewGuiBox = result
+END FUNCTION
+
+SUB GuiBoxAddChild(bx AS GuiBox, child AS ANY PTR)
+    DIM realLayoutHandle AS ANY PTR
+    realLayoutHandle = EbGuiHaikuAssocGet(bx.handle)
+    CALL HLayoutAddView(realLayoutHandle, child)
+END SUB
+
+FUNCTION NewGuiGrid() AS GuiGrid
+    DIM realLayout AS HGridLayout
+    realLayout = HGridLayoutCreate(0, 0)
+    DIM holder AS HView
+    holder = HViewCreate(0, 0, 0, 0, "eb-gui-haiku-grid", H_FOLLOW_ALL, 0)
+    CALL HViewSetLayout(holder.handle, realLayout.handle)
+    CALL EbGuiHaikuAssocSet(holder.handle, realLayout.handle)
+    DIM result AS GuiGrid
+    result.handle = holder.handle
+    NewGuiGrid = result
+END FUNCTION
+
+SUB GuiGridAttach(gr AS GuiGrid, child AS ANY PTR, column AS INTEGER, row AS INTEGER, columnSpan AS INTEGER, rowSpan AS INTEGER)
+    DIM realLayout AS HGridLayout
+    realLayout.handle = EbGuiHaikuAssocGet(gr.handle)
+    CALL HGridLayoutAddViewAt(realLayout, child, column, row, columnSpan, rowSpan)
+END SUB
+
+''' Appends `content` into the window's existing shared content layout
+''' (`EbGuiHaikuContentLayout`) - call after `GuiWindowMenuBar`/
+''' `GuiWindowToolBar` and before `GuiWindowStatusBar` for the expected
+''' top-to-bottom visual order (unenforced convention, matching
+''' `eb-gui-gtk4`'s identical precedent).
+SUB GuiWindowSetContent(win AS GuiWindow, content AS ANY PTR)
+    DIM realWin AS HWindow
+    realWin.handle = win.handle
+    DIM layout AS HGroupLayout
+    layout = EbGuiHaikuContentLayout(realWin)
+    CALL HLayoutAddView(layout.handle, content)
+END SUB
