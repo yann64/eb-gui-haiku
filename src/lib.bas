@@ -810,3 +810,216 @@ SUB GuiWindowSetContent(win AS GuiWindow, content AS ANY PTR)
     layout = EbGuiHaikuContentLayout(realWin)
     CALL HLayoutAddView(layout.handle, content)
 END SUB
+
+FUNCTION NewGuiCheckBox(text AS ZSTRING) AS GuiCheckBox
+    DIM realCb AS HCheckBox
+    realCb = HCheckBoxCreate(0, 0, 0, 0, "eb-gui-haiku-checkbox", text, 0)
+    DIM result AS GuiCheckBox
+    result.handle = realCb.handle
+    NewGuiCheckBox = result
+END FUNCTION
+
+SUB GuiCheckBoxSetChecked(cb AS GuiCheckBox, checked AS INTEGER)
+    DIM realCb AS HCheckBox
+    realCb.handle = cb.handle
+    CALL HCheckBoxSetValue(realCb, checked)
+END SUB
+
+FUNCTION GuiCheckBoxIsChecked(cb AS GuiCheckBox) AS INTEGER
+    DIM realCb AS HCheckBox
+    realCb.handle = cb.handle
+    GuiCheckBoxIsChecked = HCheckBoxGetValue(realCb)
+END FUNCTION
+
+''' Same application-attached `HHandler` mechanism as
+''' `GuiButtonConnectClicked` (this contract function gets no window
+''' reference at all).
+SUB GuiCheckBoxConnectToggled(cb AS GuiCheckBox, handler AS ANY PTR, userData AS ANY PTR)
+    DIM realCb AS HCheckBox
+    realCb.handle = cb.handle
+    DIM realApp AS HApplication
+    realApp.handle = ebGuiHaikuAppHandle
+    DIM h AS HHandler
+    h = HHandlerCreate()
+    CALL HApplicationAddHandler(realApp, h)
+    CALL HCheckBoxSetTarget(realCb, h)
+    CALL HHandlerSetCallback(h, handler, userData)
+END SUB
+
+FUNCTION NewGuiRadioButton(text AS ZSTRING) AS GuiRadioButton
+    DIM realRb AS HRadioButton
+    realRb = HRadioButtonCreate(0, 0, 0, 0, "eb-gui-haiku-radiobutton", text, 0)
+    DIM result AS GuiRadioButton
+    result.handle = realRb.handle
+    NewGuiRadioButton = result
+END FUNCTION
+
+SUB GuiRadioButtonSetChecked(rb AS GuiRadioButton, checked AS INTEGER)
+    DIM realRb AS HRadioButton
+    realRb.handle = rb.handle
+    CALL HRadioButtonSetValue(realRb, checked)
+END SUB
+
+FUNCTION GuiRadioButtonIsChecked(rb AS GuiRadioButton) AS INTEGER
+    DIM realRb AS HRadioButton
+    realRb.handle = rb.handle
+    GuiRadioButtonIsChecked = HRadioButtonGetValue(realRb)
+END FUNCTION
+
+SUB GuiRadioButtonConnectToggled(rb AS GuiRadioButton, handler AS ANY PTR, userData AS ANY PTR)
+    DIM realRb AS HRadioButton
+    realRb.handle = rb.handle
+    DIM realApp AS HApplication
+    realApp.handle = ebGuiHaikuAppHandle
+    DIM h AS HHandler
+    h = HHandlerCreate()
+    CALL HApplicationAddHandler(realApp, h)
+    CALL HRadioButtonSetTarget(realRb, h)
+    CALL HHandlerSetCallback(h, handler, userData)
+END SUB
+
+''' A documented no-op - real Haiku `BRadioButton`s that are direct
+''' siblings in the same container already enforce mutual exclusivity
+''' completely automatically (confirmed via a real 2-radio-button
+''' sibling test on hardware, `eb-haiku` v0.15.0's own README) - no
+''' group object of any kind needed.
+SUB GuiRadioButtonSetGroup(rb AS GuiRadioButton, firstInGroup AS GuiRadioButton)
+END SUB
+
+''' `GuiComboBox` wraps `HMenuField`/`HMenu` (Haiku's real combo-box
+''' analog) in radio mode (`HMenuSetRadioMode`, auto-exclusive marking
+''' on selection - the same mechanism this package's own menu radio
+''' items already use) plus `HMenuSetLabelFromMarked` (the field's own
+''' displayed text follows whichever item is marked, matching a real
+''' combo box's "shows the current selection" behavior). Neither
+''' `HMenuItem` nor `HMenuField` expose a label-getter or a
+''' which-item-is-selected query, so this adapter tracks each combo's
+''' own items (handle + text, in insertion order) itself - the same
+''' small-parallel-array pattern already used elsewhere in this
+''' package, keyed by the combo's own field handle.
+DIM ebGuiHaikuComboFieldKeys(256) AS ANY PTR
+DIM ebGuiHaikuComboItemHandles(256) AS ANY PTR
+DIM ebGuiHaikuComboItemTexts(256) AS STRING
+DIM ebGuiHaikuComboCount AS INTEGER
+
+FUNCTION NewGuiComboBox() AS GuiComboBox
+    DIM realMenu AS HMenu
+    realMenu = HMenuCreate("eb-gui-haiku-combo-menu")
+    CALL HMenuSetRadioMode(realMenu, 1)
+    CALL HMenuSetLabelFromMarked(realMenu, 1)
+    DIM field AS HMenuField
+    field = HMenuFieldCreate(0, 0, 0, 0, "eb-gui-haiku-combo", "", realMenu)
+    DIM result AS GuiComboBox
+    result.handle = field.handle
+    NewGuiComboBox = result
+END FUNCTION
+
+SUB GuiComboBoxAddItem(cb AS GuiComboBox, text AS ZSTRING)
+    DIM field AS HMenuField
+    field.handle = cb.handle
+    DIM realMenu AS HMenu
+    realMenu = HMenuFieldMenu(field)
+    DIM msg AS HMessage
+    msg = HMessageCreate(0)
+    DIM item AS HMenuItem
+    item = HMenuItemCreate(text, msg)
+    CALL HMenuAddItem(realMenu, item)
+
+    ebGuiHaikuComboFieldKeys(ebGuiHaikuComboCount) = cb.handle
+    ebGuiHaikuComboItemHandles(ebGuiHaikuComboCount) = item.handle
+    ebGuiHaikuComboItemTexts(ebGuiHaikuComboCount) = text
+    ebGuiHaikuComboCount = ebGuiHaikuComboCount + 1
+
+    ' The first item added becomes selected by default (matches a real
+    ' combo box always showing some current value) - mark it directly
+    ' rather than waiting for a real or simulated selection.
+    IF GuiComboBoxGetSelectedIndex(cb) < 0 THEN
+        DIM firstItem AS HMenuItem
+        firstItem.handle = item.handle
+        CALL HMenuItemSetMarked(firstItem, 1)
+    END IF
+END SUB
+
+''' Real 0-based insertion index among just THIS combo's own items
+''' (found by scanning this adapter's own tracking table for the item
+''' `HMenuItemIsMarked` reports true for) - real Haiku radio mode
+''' guarantees at most one marked item at a time. Returns -1 if none
+''' marked yet (an empty combo, or before the first AddItem call).
+FUNCTION GuiComboBoxGetSelectedIndex(cb AS GuiComboBox) AS INTEGER
+    DIM i AS INTEGER
+    DIM localIndex AS INTEGER
+    localIndex = 0
+    FOR i = 0 TO ebGuiHaikuComboCount - 1
+        IF ebGuiHaikuComboFieldKeys(i) = cb.handle THEN
+            DIM item AS HMenuItem
+            item.handle = ebGuiHaikuComboItemHandles(i)
+            IF HMenuItemIsMarked(item) THEN
+                GuiComboBoxGetSelectedIndex = localIndex
+                EXIT FUNCTION
+            END IF
+            localIndex = localIndex + 1
+        END IF
+    NEXT i
+    GuiComboBoxGetSelectedIndex = -1
+END FUNCTION
+
+SUB GuiComboBoxSetSelectedIndex(cb AS GuiComboBox, index AS INTEGER)
+    DIM i AS INTEGER
+    DIM localIndex AS INTEGER
+    localIndex = 0
+    FOR i = 0 TO ebGuiHaikuComboCount - 1
+        IF ebGuiHaikuComboFieldKeys(i) = cb.handle THEN
+            IF localIndex = index THEN
+                DIM item AS HMenuItem
+                item.handle = ebGuiHaikuComboItemHandles(i)
+                CALL HMenuItemSetMarked(item, 1)
+                EXIT SUB
+            END IF
+            localIndex = localIndex + 1
+        END IF
+    NEXT i
+END SUB
+
+FUNCTION GuiComboBoxGetSelectedText(cb AS GuiComboBox) AS ZSTRING
+    DIM selectedIndex AS INTEGER
+    selectedIndex = GuiComboBoxGetSelectedIndex(cb)
+    DIM i AS INTEGER
+    DIM localIndex AS INTEGER
+    localIndex = 0
+    FOR i = 0 TO ebGuiHaikuComboCount - 1
+        IF ebGuiHaikuComboFieldKeys(i) = cb.handle THEN
+            IF localIndex = selectedIndex THEN
+                GuiComboBoxGetSelectedText = ebGuiHaikuComboItemTexts(i)
+                EXIT FUNCTION
+            END IF
+            localIndex = localIndex + 1
+        END IF
+    NEXT i
+    GuiComboBoxGetSelectedText = ""
+END FUNCTION
+
+''' Every item this combo owns AT THE TIME OF THIS CALL shares the same
+''' target/callback - a real selection change (of any item) fires it,
+''' matching "changed" semantics; call GuiComboBoxGetSelectedIndex/
+''' GetSelectedText yourself from inside the handler to see which one.
+''' Call this AFTER all GuiComboBoxAddItem calls for this combo -
+''' items added afterward won't have the target wired (matching this
+''' package's own established call-order conventions elsewhere, e.g.
+''' GuiWindowSetContent).
+SUB GuiComboBoxConnectChanged(cb AS GuiComboBox, handler AS ANY PTR, userData AS ANY PTR)
+    DIM realApp AS HApplication
+    realApp.handle = ebGuiHaikuAppHandle
+    DIM h AS HHandler
+    h = HHandlerCreate()
+    CALL HApplicationAddHandler(realApp, h)
+    CALL HHandlerSetCallback(h, handler, userData)
+
+    DIM i AS INTEGER
+    FOR i = 0 TO ebGuiHaikuComboCount - 1
+        IF ebGuiHaikuComboFieldKeys(i) = cb.handle THEN
+            DIM item AS HMenuItem
+            item.handle = ebGuiHaikuComboItemHandles(i)
+            CALL HMenuItemSetTarget(item, h)
+        END IF
+    NEXT i
+END SUB

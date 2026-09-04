@@ -193,6 +193,48 @@ CALL GuiWidgetSetMinSize(fixedBtn.handle, 200, 40)
 CALL GuiWidgetSetMaxSize(fixedBtn.handle, 300, 60)
 PRINT "Round 3 min/max size (GuiWidgetSetMinSize/SetMaxSize) ran without crashing"
 
+' 8. Round 4: CheckBox/RadioButton/ComboBox. Real Haiku sibling
+' auto-exclusivity only activates once attached to a shared container
+' (see eb-haiku's own README v0.15.0 refinement) - attach BEFORE
+' setting checked values, not after.
+DIM cb AS GuiCheckBox
+cb = NewGuiCheckBox("Enable feature")
+PRINT "checkbox initial: ", GuiCheckBoxIsChecked(cb)
+CALL GuiCheckBoxSetChecked(cb, 1)
+PRINT "checkbox after set: ", GuiCheckBoxIsChecked(cb)
+CALL GuiCheckBoxConnectToggled(cb, @OnActionTriggered, 0)
+PRINT "checkbox connect toggled did not crash"
+
+DIM radioBox AS GuiBox
+radioBox = NewGuiBox(1, 4)
+DIM r1 AS GuiRadioButton
+r1 = NewGuiRadioButton("Option A")
+DIM r2 AS GuiRadioButton
+r2 = NewGuiRadioButton("Option B")
+CALL GuiRadioButtonSetGroup(r2, r1)
+CALL GuiBoxAddChild(radioBox, r1.handle)
+CALL GuiBoxAddChild(radioBox, r2.handle)
+CALL GuiRadioButtonSetChecked(r1, 1)
+PRINT "r1: ", GuiRadioButtonIsChecked(r1)
+PRINT "r2 (real sibling exclusivity, expect 0): ", GuiRadioButtonIsChecked(r2)
+
+DIM combo AS GuiComboBox
+combo = NewGuiComboBox()
+CALL GuiComboBoxAddItem(combo, "First")
+CALL GuiComboBoxAddItem(combo, "Second")
+PRINT "combo initial index (first item auto-selected): ", GuiComboBoxGetSelectedIndex(combo)
+PRINT "combo initial text: ", GuiComboBoxGetSelectedText(combo)
+CALL GuiComboBoxSetSelectedIndex(combo, 1)
+PRINT "combo index after SetSelectedIndex(1): ", GuiComboBoxGetSelectedIndex(combo)
+PRINT "combo text: ", GuiComboBoxGetSelectedText(combo)
+CALL GuiComboBoxConnectChanged(combo, @OnActionTriggered, 0)
+PRINT "combo connect changed did not crash"
+
+CALL GuiBoxAddChild(widgetsBox, cb.handle)
+CALL GuiBoxAddChild(widgetsBox, radioBox.handle)
+CALL GuiBoxAddChild(widgetsBox, combo.handle)
+PRINT "Round 4 widgets (CheckBox/RadioButton/ComboBox) ran without crashing"
+
 ' 5. GuiTimer, and (via its own callback) GuiApplicationQuit stopping
 ' GuiApplicationRun - the same real running-loop quit proof eb-gtk4/
 ' eb-qt6's own equivalents use.

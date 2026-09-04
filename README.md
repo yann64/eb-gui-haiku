@@ -261,6 +261,67 @@ rather than a defect - pair `GuiWidgetSetMinSize`/`SetMaxSize` with
 `GuiBoxAddChildEx`'s own `expand` parameter (Round 2) if you want a
 constrained item to also visibly grow.
 
+## Widgets (Round 4) - CheckBox, RadioButton, ComboBox
+
+`eb-haiku` needed genuinely new native work this round (v0.15.0):
+`HCheckBox`/`HRadioButton` constructors mirroring `HButtonCreate`'s own
+shape, plus `SetValue`/`Value` (real Haiku uses an `int`, not a bool).
+The combo-box role needed none - `HMenuField` (a labeled dropdown menu
+button) already existed.
+
+```basic
+DIM cb AS GuiCheckBox
+cb = NewGuiCheckBox("Enable feature")
+CALL GuiCheckBoxSetChecked(cb, 1)
+
+DIM r1 AS GuiRadioButton
+r1 = NewGuiRadioButton("Option A")
+DIM r2 AS GuiRadioButton
+r2 = NewGuiRadioButton("Option B")
+CALL GuiRadioButtonSetGroup(r2, r1)   ' documented no-op - see below
+CALL GuiBoxAddChild(box, r1.handle)   ' attach BEFORE setting checked
+CALL GuiBoxAddChild(box, r2.handle)   ' state - see the real finding below
+
+DIM combo AS GuiComboBox
+combo = NewGuiComboBox()
+CALL GuiComboBoxAddItem(combo, "First")
+CALL GuiComboBoxAddItem(combo, "Second")
+CALL GuiComboBoxSetSelectedIndex(combo, 0)
+PRINT GuiComboBoxGetSelectedText(combo)
+```
+
+`GuiRadioButtonSetGroup` is a documented no-op here: real Haiku
+`BRadioButton`s that are direct siblings in a shared container enforce
+mutual exclusivity completely automatically, confirmed via a real
+2-radio-button sibling test on hardware (`eb-haiku` v0.15.0's own
+README), not assumed from the similar `BMenuItem` precedent.
+
+**Real, non-obvious finding, caught by an inconclusive first test
+rather than assumed working**: that automatic exclusivity only
+activates once the radio buttons are actually **attached to a shared
+container** - calling `GuiRadioButtonSetChecked` on freshly-created,
+not-yet-attached buttons does NOT enforce it between them. A first test
+(set values, then attach) showed both buttons independently holding
+`1` at once; a second test (attach, then set values) showed correct
+exclusivity. Real Haiku's sibling-scan almost certainly runs from an
+`AttachedToWindow()`-style hook with nothing to scan before attachment
+- not a bug, but attach to a `GuiBox`/`GuiGrid` (or the window) BEFORE
+setting checked state, not after.
+
+`GuiComboBox` wraps `HMenuField`/`HMenu` in radio mode
+(`HMenuSetRadioMode`) plus `HMenuSetLabelFromMarked` (the field's own
+displayed text follows the marked item, matching a real combo box).
+Neither `HMenuItem` nor `HMenuField` expose a label-getter or a
+which-item-is-selected query, so this adapter tracks each combo's own
+items (handle + text, insertion order) itself in a small internal
+table, keyed by the combo's own field handle - the same small-
+parallel-array pattern used elsewhere in this package.
+`GuiComboBoxConnectChanged` must be called AFTER all `GuiComboBoxAddItem`
+calls for that combo - it wires the shared target/callback onto every
+item that exists at call time, so items added afterward won't have it
+(documented, matching this package's own established call-order
+conventions elsewhere, e.g. `GuiWindowSetContent`).
+
 ## Verifying
 
 Real hardware only, over SSH (this package binds `libbe.so`, which
@@ -288,7 +349,11 @@ any more than on `eb-qt6`.
   `SetRowWeight` (Round 2 constraints) running without crashing with
   correct index tracking across mixed `AddChild`/`AddChildEx` calls,
   `GuiWidgetSetMinSize`/`SetMaxSize` (Round 3) running without
-  crashing, and a `GuiTimer`-driven `GuiApplicationQuit` exiting
+  crashing, `GuiCheckBoxConnectToggled`/real cross-container
+  `GuiRadioButton` sibling exclusivity (attached before setting checked
+  state)/`GuiComboBoxAddItem`/`GetSelectedIndex`/`SetSelectedIndex`/
+  `GetSelectedText`/`ConnectChanged` (Round 4) all round-tripping
+  correctly, and a `GuiTimer`-driven `GuiApplicationQuit` exiting
   `GuiApplicationRun` promptly.
 - `examples/widgets_form.bas` - a `GuiBox` containing a `GuiLabel` +
   `GuiEntry` + `GuiButton`, clicking the button reads the entry and
