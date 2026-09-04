@@ -255,6 +255,46 @@ CALL GuiBoxAddChild(widgetsBox, pb.handle)
 CALL GuiBoxAddChild(widgetsBox, sliderWidget.handle)
 PRINT "Round 5 widgets (ProgressBar/Slider) ran without crashing"
 
+' 10. Round 6: ListBox/TextView. GuiListBoxConnectSelectionChanged fires
+' SYNCHRONOUSLY (unlike the menu/toolbar action handlers above) - real
+' BListView::Select() calls the virtual SelectionChanged() hook directly
+' in-thread, with no BMessenger/BLooper round-trip involved, so no Sleep
+' is needed here to observe it.
+DIM lb AS GuiListBox
+lb = NewGuiListBox()
+CALL GuiListBoxAddItem(lb, "First")
+CALL GuiListBoxAddItem(lb, "Second")
+PRINT "listbox count after 2 adds: ", GuiListBoxGetCount(lb)
+PRINT "listbox item 0 text: ", GuiListBoxGetItemText(lb, 0)
+PRINT "listbox item 1 text: ", GuiListBoxGetItemText(lb, 1)
+PRINT "listbox selected index before any selection (expect -1): ", GuiListBoxGetSelectedIndex(lb)
+
+DIM listBoxSelectionCount AS INTEGER
+listBoxSelectionCount = 0
+SUB OnListBoxSelectionChanged(userData AS ANY PTR)
+    listBoxSelectionCount = listBoxSelectionCount + 1
+END SUB
+CALL GuiListBoxConnectSelectionChanged(lb, @OnListBoxSelectionChanged, 0)
+CALL GuiListBoxSetSelectedIndex(lb, 1)
+PRINT "listbox selected index after SetSelectedIndex(1): ", GuiListBoxGetSelectedIndex(lb)
+PRINT "listbox selection changed count: ", listBoxSelectionCount
+
+CALL GuiListBoxClear(lb)
+PRINT "listbox count after Clear: ", GuiListBoxGetCount(lb)
+CALL GuiListBoxAddItem(lb, "Third")
+PRINT "listbox item 0 text after Clear+re-add (expect Third, not stale): ", GuiListBoxGetItemText(lb, 0)
+
+DIM tv AS GuiTextView
+tv = NewGuiTextView()
+CALL GuiTextViewSetText(tv, "hello text view")
+PRINT "text view text round-trip: ", GuiTextViewGetText(tv)
+CALL GuiTextViewSetEditable(tv, 0)
+CALL GuiTextViewSetEditable(tv, 1)
+
+CALL GuiBoxAddChild(widgetsBox, lb.handle)
+CALL GuiBoxAddChild(widgetsBox, tv.handle)
+PRINT "Round 6 widgets (ListBox/TextView) ran without crashing"
+
 ' 5. GuiTimer, and (via its own callback) GuiApplicationQuit stopping
 ' GuiApplicationRun - the same real running-loop quit proof eb-gtk4/
 ' eb-qt6's own equivalents use.

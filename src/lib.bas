@@ -1095,3 +1095,132 @@ SUB GuiSliderConnectValueChanged(s AS GuiSlider, handler AS ANY PTR, userData AS
     CALL HSliderSetTarget(realSlider, h)
     CALL HHandlerSetCallback(h, handler, userData)
 END SUB
+
+''' Real `BListView` (`eb-haiku`'s own `HListView`) has no by-index
+''' item-text getter at all - only each item's own `HStringItemGetText`
+''' - and no way to read the item HANDLE back at a given index either.
+''' This adapter tracks each list box's own item texts itself, the same
+''' small-parallel-array pattern already used for `GuiComboBox` above.
+DIM ebGuiHaikuListBoxKeys(1024) AS ANY PTR
+DIM ebGuiHaikuListBoxItemTexts(1024) AS STRING
+DIM ebGuiHaikuListBoxCount AS INTEGER
+
+FUNCTION NewGuiListBox() AS GuiListBox
+    DIM realList AS HListView
+    realList = HListViewCreate(0, 0, 0, 0, "eb-gui-haiku-listbox", 0)
+    DIM result AS GuiListBox
+    result.handle = realList.handle
+    NewGuiListBox = result
+END FUNCTION
+
+SUB GuiListBoxAddItem(lb AS GuiListBox, text AS ZSTRING)
+    DIM realList AS HListView
+    realList.handle = lb.handle
+    DIM item AS HStringItem
+    item = HStringItemCreate(text)
+    CALL HListViewAddItem(realList, item.handle)
+
+    ebGuiHaikuListBoxKeys(ebGuiHaikuListBoxCount) = lb.handle
+    ebGuiHaikuListBoxItemTexts(ebGuiHaikuListBoxCount) = text
+    ebGuiHaikuListBoxCount = ebGuiHaikuListBoxCount + 1
+END SUB
+
+FUNCTION GuiListBoxGetItemText(lb AS GuiListBox, index AS INTEGER) AS ZSTRING
+    DIM i AS INTEGER
+    DIM localIndex AS INTEGER
+    localIndex = 0
+    FOR i = 0 TO ebGuiHaikuListBoxCount - 1
+        IF ebGuiHaikuListBoxKeys(i) = lb.handle THEN
+            IF localIndex = index THEN
+                GuiListBoxGetItemText = ebGuiHaikuListBoxItemTexts(i)
+                EXIT FUNCTION
+            END IF
+            localIndex = localIndex + 1
+        END IF
+    NEXT i
+    GuiListBoxGetItemText = ""
+END FUNCTION
+
+FUNCTION GuiListBoxGetCount(lb AS GuiListBox) AS INTEGER
+    DIM realList AS HListView
+    realList.handle = lb.handle
+    GuiListBoxGetCount = HListViewCountItems(realList)
+END FUNCTION
+
+''' Also drops this list box's own tracked item texts (compacts the
+''' shared table) - same reasoning as eb-gui-qt6's own GuiListBoxClear.
+SUB GuiListBoxClear(lb AS GuiListBox)
+    DIM realList AS HListView
+    realList.handle = lb.handle
+    CALL HListViewMakeEmpty(realList)
+
+    DIM i AS INTEGER
+    DIM writeIndex AS INTEGER
+    writeIndex = 0
+    FOR i = 0 TO ebGuiHaikuListBoxCount - 1
+        IF ebGuiHaikuListBoxKeys(i) <> lb.handle THEN
+            ebGuiHaikuListBoxKeys(writeIndex) = ebGuiHaikuListBoxKeys(i)
+            ebGuiHaikuListBoxItemTexts(writeIndex) = ebGuiHaikuListBoxItemTexts(i)
+            writeIndex = writeIndex + 1
+        END IF
+    NEXT i
+    ebGuiHaikuListBoxCount = writeIndex
+END SUB
+
+''' Direct pass-through - real BListView::CurrentSelection() already
+''' returns -1 when nothing is selected, exactly matching this
+''' contract function's own convention.
+FUNCTION GuiListBoxGetSelectedIndex(lb AS GuiListBox) AS INTEGER
+    DIM realList AS HListView
+    realList.handle = lb.handle
+    GuiListBoxGetSelectedIndex = HListViewCurrentSelection(realList)
+END FUNCTION
+
+SUB GuiListBoxSetSelectedIndex(lb AS GuiListBox, index AS INTEGER)
+    DIM realList AS HListView
+    realList.handle = lb.handle
+    CALL HListViewSelect(realList, index)
+END SUB
+
+''' Direct pass-through to `HListViewSetSelectionChangedCallback` - NOT
+''' the usual `HApplicationAddHandler`+`SetTarget` pattern used by
+''' `GuiButtonConnectClicked`/`GuiSliderConnectValueChanged` above: real
+''' `BListView` has no `BInvoker`/target+message mechanism for
+''' per-selection-change notification at all (see `eb-haiku`'s own
+''' `listview.bas` top comment), so its own `ShimListView` subclass
+''' forwards straight from a real virtual `SelectionChanged()` override
+''' to a plain callback - already self-contained, no `HHandler` needed.
+SUB GuiListBoxConnectSelectionChanged(lb AS GuiListBox, handler AS ANY PTR, userData AS ANY PTR)
+    DIM realList AS HListView
+    realList.handle = lb.handle
+    CALL HListViewSetSelectionChangedCallback(realList, handler, userData)
+END SUB
+
+FUNCTION NewGuiTextView() AS GuiTextView
+    DIM realView AS HTextView
+    realView = HTextViewCreate(0, 0, 0, 0, "eb-gui-haiku-textview")
+    DIM result AS GuiTextView
+    result.handle = realView.handle
+    NewGuiTextView = result
+END FUNCTION
+
+SUB GuiTextViewSetText(tv AS GuiTextView, text AS ZSTRING)
+    DIM realView AS HTextView
+    realView.handle = tv.handle
+    CALL HTextViewSetText(realView, text)
+END SUB
+
+''' Borrowed from real BTextView's own long-lived storage - no
+''' heap allocation, no leak (unlike eb-gui-gtk4/eb-gui-qt6's own
+''' GuiTextViewGetText, which each leak a small per-call buffer).
+FUNCTION GuiTextViewGetText(tv AS GuiTextView) AS ZSTRING
+    DIM realView AS HTextView
+    realView.handle = tv.handle
+    GuiTextViewGetText = HTextViewGetText(realView)
+END FUNCTION
+
+SUB GuiTextViewSetEditable(tv AS GuiTextView, editable AS INTEGER)
+    DIM realView AS HTextView
+    realView.handle = tv.handle
+    CALL HTextViewMakeEditable(realView, editable)
+END SUB

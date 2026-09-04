@@ -351,6 +351,78 @@ screenshot confirming both widgets render correctly - the progress
 bar's fill and the slider's thumb position both visually matched the
 values set.
 
+## Widgets (Round 6) - ListBox, TextView
+
+`eb-haiku` needed genuinely new native work this round (v0.17.0):
+`HListView`/`HStringItem`, wrapping real `BListView`/`BStringItem`
+from scratch.
+
+```basic
+DIM lb AS GuiListBox
+lb = NewGuiListBox()
+CALL GuiListBoxAddItem(lb, "First")
+CALL GuiListBoxAddItem(lb, "Second")
+CALL GuiListBoxSetSelectedIndex(lb, 1)
+PRINT GuiListBoxGetSelectedIndex(lb)   ' 1
+PRINT GuiListBoxGetItemText(lb, 0)     ' First
+
+DIM tv AS GuiTextView
+tv = NewGuiTextView()
+CALL GuiTextViewSetText(tv, "hello")
+PRINT GuiTextViewGetText(tv)
+```
+
+**A real, confirmed-not-assumed Haiku finding**: real `BListView` has
+NO `BInvoker`/target+message mechanism for per-selection-change
+notification at all - unlike every other `BControl`-based widget bound
+so far (`HButton`/`HCheckBox`/`HRadioButton`/`HSlider`), which all use
+the application-attached `HHandler` pattern. `BListView` only exposes
+`SetInvocationMessage`, which fires on double-click/Enter
+("activation"), not every selection change - confirmed against a real,
+independently hardware-verified sibling FreeBASIC Haiku binding
+project's own header files, since no local Haiku SDK headers exist on
+the Linux development machine this research happened on. The only way
+to observe every selection change is the protected virtual
+`SelectionChanged()` hook, so `eb-haiku`'s own `listview.bas` adds a
+`ShimListView : public BListView` subclass overriding it and
+forwarding to a plain callback - the same "no other way to reach a
+virtual from eBasic" reasoning already used for `HWindow`/`HView`'s own
+callbacks. `GuiListBoxConnectSelectionChanged` here is therefore a
+DIRECT pass-through to `HListViewSetSelectionChangedCallback`, NOT the
+usual `HApplicationAddHandler`+`SetTarget` pattern - `ShimListView`'s
+own callback mechanism is already self-contained. It also fires
+SYNCHRONOUSLY (confirmed via `examples/verify.bas`, no `Sleep` needed
+to observe it) - real `BListView::Select()` calls the virtual hook
+directly in-thread, unlike the menu/toolbar action handlers' own real
+`BMessenger`/`BLooper` round-trip (see "Real capability differences"
+above).
+
+**Another real, confirmed gap**: real `BListView` has no by-index
+item-text getter, and no way to read an item's own handle back at a
+given index either (only `BStringItem::Text()`, given the item handle
+you already have). This adapter tracks each list box's own item texts
+itself, the same small-parallel-array pattern already used for
+`GuiComboBox`'s own analogous gap; `GuiListBoxClear` compacts the
+shared table so a later `AddItem` after `Clear` can't read back stale
+text (verified directly in `examples/verify.bas`).
+
+`GuiTextView` wraps `eb-haiku`'s already-bound `HTextView` directly -
+no new native work needed for it, and `GuiTextViewGetText` borrows
+real `BTextView`'s own long-lived storage (no per-call leak, unlike
+`eb-gui-gtk4`/`eb-gui-qt6`'s own `GuiTextViewGetText`, which each leak
+a small buffer). `GuiTextView` deliberately has no
+`ConnectTextChanged` this round - real `BTextView` isn't a `BControl`
+and has no existing target/message mechanism for live text-change
+notification (unlike `BTextControl`, which already got this in Round
+1) - a real, scoped prerequisite (a new `ShimTextView` virtual-
+forwarding subclass, mirroring `ShimListView`'s own technique) for a
+future round, not silently dropped.
+
+Verified end-to-end on real Haiku hardware, including a live
+screenshot confirming both widgets render correctly - a 3-item list
+box with the 3rd item correctly highlighted as selected, and the text
+view showing its own set text below it.
+
 ## Verifying
 
 Real hardware only, over SSH (this package binds `libbe.so`, which
@@ -386,7 +458,14 @@ any more than on `eb-qt6`.
   `GuiSliderSetRange`/`SetValue`/`GetValue`/`ConnectValueChanged`
   (Round 5) round-tripping correctly (plus a separate live screenshot -
   see above - confirming both render correctly, not just "didn't
-  crash"), and a `GuiTimer`-driven `GuiApplicationQuit` exiting
+  crash"), `GuiListBoxAddItem`/`GetItemText`/`GetCount`/`Clear`/
+  `GetSelectedIndex`/`SetSelectedIndex`/`ConnectSelectionChanged` and
+  `GuiTextViewSetText`/`GetText`/`SetEditable` (Round 6) round-tripping
+  correctly - including a synchronous selection-changed callback check
+  and a `Clear`-then-re-`AddItem` check confirming the item-text
+  tracking table doesn't leak stale text across a clear (plus a
+  separate live screenshot - see above - confirming both render
+  correctly) - and a `GuiTimer`-driven `GuiApplicationQuit` exiting
   `GuiApplicationRun` promptly.
 - `examples/widgets_form.bas` - a `GuiBox` containing a `GuiLabel` +
   `GuiEntry` + `GuiButton`, clicking the button reads the entry and
