@@ -7,17 +7,19 @@ cross-toolkit GUI API, managed with `ebpm`.
 ## Status
 
 Full contract (`Application`/`Window`/`StatusBar`/`Timer`/`Menu`/
-`Toolbar`/`Action`), plus Widget/Layout Round 1 (`GuiButton`/
-`GuiLabel`/`GuiEntry` + `GuiBox`/`GuiGrid`), implementing every
+`Toolbar`/`Action`), Widget/Layout Round 1 (`GuiButton`/`GuiLabel`/
+`GuiEntry` + `GuiBox`/`GuiGrid`), and Round 2 (per-child expand/
+alignment + per-column/row weight constraints), implementing every
 function in `eb-gui`'s own contract by calling into
 [`eb-haiku`](https://github.com/yann64/eb-haiku). Needs **no native
 code of its own at all** - every native piece this adapter needed
 (window title/geometry/enable/modal, a reusable per-object callback
 target plus its button/menu-item/text-field/application-level
-attachment points, a `BMessageRunner`-based timer) was added to
-`eb-haiku` itself (`v0.14.0`-`v0.14.3`) as prerequisite work, exactly
-the same "extend the base binding first" pattern `eb-gui-gtk4`/
-`eb-gui-qt6` each followed for their own toolkits.
+attachment points, a `BMessageRunner`-based timer, the real "fill"
+alignment sentinel) was added to `eb-haiku` itself (`v0.14.0`-`v0.14.4`)
+as prerequisite work, exactly the same "extend the base binding first"
+pattern `eb-gui-gtk4`/`eb-gui-qt6` each followed for their own
+toolkits.
 
 **`GuiButtonConnectClicked`/`GuiEntryConnectChanged` attach to the
 APPLICATION's own `BLooper`** (`HApplicationAddHandler`, `eb-haiku`
@@ -206,6 +208,35 @@ CALL GuiWindowShow(win)
 CALL GuiApplicationRun(app)
 ```
 
+Round 2 constraints (expand/align/weight):
+
+```basic
+DIM growBtn AS GuiButton
+growBtn = NewGuiButton("Grows")
+CALL GuiBoxAddChildEx(box, growBtn.handle, 1.0, GUI_ALIGN_FILL, GUI_ALIGN_CENTER)
+
+DIM fixedBtn AS GuiButton
+fixedBtn = NewGuiButton("Fixed")
+CALL GuiBoxAddChildEx(box, fixedBtn.handle, 0.0, GUI_ALIGN_END, GUI_ALIGN_START)
+```
+
+`GuiBoxAddChildEx` sets a real, proportional `HGroupLayoutSetItemWeight`
+(index-based - this adapter tracks each `GuiBox`'s own running child
+count internally, `EbGuiHaikuBoxNextChildIndex`, since Haiku's weight
+API is index-based rather than view-identity-based like `eb-qt6`'s own
+stretch factor) plus `HViewSetExplicitAlignment`. `GUI_ALIGN_FILL` maps
+to real Haiku's own `H_ALIGN_USE_FULL_WIDTH`/`HEIGHT` sentinel
+(`eb-haiku` v0.14.4+) - **not** `H_ALIGN_CENTER`. A real bug caught via
+this round's own live screenshot: approximating "fill" as "center"
+doesn't just fail to stretch a view, it actively breaks the default
+fill/stretch behavior a view already has before
+`HViewSetExplicitAlignment` is ever called - confirmed by a button
+rendering centered at its natural size instead of spanning the full
+box width, then fixed by adding the missing real sentinel to
+`eb-haiku` rather than working around it here. `GuiGridSetColumnWeight`/
+`SetRowWeight` are real, direct `HGridLayoutSetColumnWeight`/
+`SetRowWeight` pass-throughs.
+
 ## Verifying
 
 Real hardware only, over SSH (this package binds `libbe.so`, which
@@ -228,12 +259,18 @@ any more than on `eb-qt6`.
   differences" above), `GuiWindowToolBar` returning the identical
   handle on repeated calls, `GuiEntrySetText`/`GetText` round-tripping
   through a `GuiGrid` nested inside a `GuiBox`, `GuiWindowSetContent`
-  composing with StatusBar/MenuBar/ToolBar without crashing, and a
-  `GuiTimer`-driven `GuiApplicationQuit` exiting `GuiApplicationRun`
-  promptly.
+  composing with StatusBar/MenuBar/ToolBar without crashing,
+  `GuiBoxAddChildEx`/`GuiGridAttachEx`/`GuiGridSetColumnWeight`/
+  `SetRowWeight` (Round 2 constraints) running without crashing with
+  correct index tracking across mixed `AddChild`/`AddChildEx` calls,
+  and a `GuiTimer`-driven `GuiApplicationQuit` exiting
+  `GuiApplicationRun` promptly.
 - `examples/widgets_form.bas` - a `GuiBox` containing a `GuiLabel` +
   `GuiEntry` + `GuiButton`, clicking the button reads the entry and
-  updates the label (screenshot-verified live on real Haiku hardware).
+  updates the label; the `Go` button is added via `GuiBoxAddChildEx`
+  with `expand=1.0`/`GUI_ALIGN_FILL` and visibly spans the full box
+  width (screenshot-verified live on real Haiku hardware - this is the
+  screenshot that caught the `H_ALIGN_FILL`-vs-`CENTER` bug above).
 
 ## See also
 

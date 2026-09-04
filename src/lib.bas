@@ -664,10 +664,88 @@ FUNCTION NewGuiBox(orientation AS INTEGER, spacing AS INTEGER) AS GuiBox
     NewGuiBox = result
 END FUNCTION
 
+''' Tracks each GuiBox's own running child count (0-based insertion
+''' index) - HGroupLayoutSetItemWeight is index-based, not
+''' view-identity-based (unlike eb-qt6's own stretch-factor-on-the-
+''' widget-itself shape), so this adapter has to count. Returns the
+''' index for the child being added right now, then increments.
+DIM ebGuiHaikuBoxChildCountKeys(128) AS ANY PTR
+DIM ebGuiHaikuBoxChildCountVals(128) AS INTEGER
+DIM ebGuiHaikuBoxChildCountEntries AS INTEGER
+
+FUNCTION EbGuiHaikuBoxNextChildIndex(boxHandle AS ANY PTR) AS INTEGER
+    DIM i AS INTEGER
+    FOR i = 0 TO ebGuiHaikuBoxChildCountEntries - 1
+        IF ebGuiHaikuBoxChildCountKeys(i) = boxHandle THEN
+            EbGuiHaikuBoxNextChildIndex = ebGuiHaikuBoxChildCountVals(i)
+            ebGuiHaikuBoxChildCountVals(i) = ebGuiHaikuBoxChildCountVals(i) + 1
+            EXIT FUNCTION
+        END IF
+    NEXT i
+    ebGuiHaikuBoxChildCountKeys(ebGuiHaikuBoxChildCountEntries) = boxHandle
+    ebGuiHaikuBoxChildCountVals(ebGuiHaikuBoxChildCountEntries) = 1
+    ebGuiHaikuBoxChildCountEntries = ebGuiHaikuBoxChildCountEntries + 1
+    EbGuiHaikuBoxNextChildIndex = 0
+END FUNCTION
+
 SUB GuiBoxAddChild(bx AS GuiBox, child AS ANY PTR)
     DIM realLayoutHandle AS ANY PTR
     realLayoutHandle = EbGuiHaikuAssocGet(bx.handle)
     CALL HLayoutAddView(realLayoutHandle, child)
+    ' Keep the index counter in sync even for a plain (non-Ex) add, so
+    ' mixing GuiBoxAddChild/GuiBoxAddChildEx calls on the same box still
+    ' assigns each later GuiBoxAddChildEx child the correct real index.
+    CALL EbGuiHaikuBoxNextChildIndex(bx.handle)
+END SUB
+
+''' Maps the contract's toolkit-neutral GUI_ALIGN_* onto real Haiku's
+''' own H_ALIGN_* constants. GUI_ALIGN_FILL maps to the real
+''' H_ALIGN_USE_FULL_WIDTH sentinel (eb-haiku v0.14.4+) - NOT the same
+''' as H_ALIGN_CENTER. A real, found-the-hard-way bug during this
+''' round's own verification: approximating "fill" as "center" doesn't
+''' just fail to stretch, it actively BREAKS the default stretch
+''' behavior a view already has before HViewSetExplicitAlignment is
+''' ever called (a live screenshot showed a "fill"-requested button
+''' rendering centered at its natural size, when it should have
+''' spanned the full width) - see eb-haiku's own v0.14.4 changelog.
+FUNCTION EbGuiHaikuMapHAlign(guiAlign AS INTEGER) AS INTEGER
+    IF guiAlign = GUI_ALIGN_START THEN
+        EbGuiHaikuMapHAlign = H_ALIGN_LEFT
+    ELSEIF guiAlign = GUI_ALIGN_CENTER THEN
+        EbGuiHaikuMapHAlign = H_ALIGN_CENTER
+    ELSEIF guiAlign = GUI_ALIGN_END THEN
+        EbGuiHaikuMapHAlign = H_ALIGN_RIGHT
+    ELSE
+        EbGuiHaikuMapHAlign = H_ALIGN_USE_FULL_WIDTH
+    END IF
+END FUNCTION
+
+FUNCTION EbGuiHaikuMapVAlign(guiAlign AS INTEGER) AS INTEGER
+    IF guiAlign = GUI_ALIGN_START THEN
+        EbGuiHaikuMapVAlign = H_ALIGN_TOP
+    ELSEIF guiAlign = GUI_ALIGN_CENTER THEN
+        EbGuiHaikuMapVAlign = H_ALIGN_MIDDLE
+    ELSEIF guiAlign = GUI_ALIGN_END THEN
+        EbGuiHaikuMapVAlign = H_ALIGN_BOTTOM
+    ELSE
+        EbGuiHaikuMapVAlign = H_ALIGN_USE_FULL_HEIGHT
+    END IF
+END FUNCTION
+
+''' Like GuiBoxAddChild, but also sets the child's real, proportional
+''' item weight on the real HGroupLayout (a genuine ratio, like
+''' eb-gui-qt6's own stretch factor - unlike eb-gui-gtk4's boolean-only
+''' expand) and its alignment.
+SUB GuiBoxAddChildEx(bx AS GuiBox, child AS ANY PTR, expand AS SINGLE, halign AS INTEGER, valign AS INTEGER)
+    DIM realLayoutHandle AS ANY PTR
+    realLayoutHandle = EbGuiHaikuAssocGet(bx.handle)
+    CALL HLayoutAddView(realLayoutHandle, child)
+    DIM idx AS INTEGER
+    idx = EbGuiHaikuBoxNextChildIndex(bx.handle)
+    DIM realLayout AS HGroupLayout
+    realLayout.handle = realLayoutHandle
+    CALL HGroupLayoutSetItemWeight(realLayout, idx, expand)
+    CALL HViewSetExplicitAlignment(child, EbGuiHaikuMapHAlign(halign), EbGuiHaikuMapVAlign(valign))
 END SUB
 
 FUNCTION NewGuiGrid() AS GuiGrid
@@ -686,6 +764,26 @@ SUB GuiGridAttach(gr AS GuiGrid, child AS ANY PTR, column AS INTEGER, row AS INT
     DIM realLayout AS HGridLayout
     realLayout.handle = EbGuiHaikuAssocGet(gr.handle)
     CALL HGridLayoutAddViewAt(realLayout, child, column, row, columnSpan, rowSpan)
+END SUB
+
+''' Like GuiGridAttach, but also sets the child's alignment within its cell.
+SUB GuiGridAttachEx(gr AS GuiGrid, child AS ANY PTR, column AS INTEGER, row AS INTEGER, columnSpan AS INTEGER, rowSpan AS INTEGER, halign AS INTEGER, valign AS INTEGER)
+    CALL GuiGridAttach(gr, child, column, row, columnSpan, rowSpan)
+    CALL HViewSetExplicitAlignment(child, EbGuiHaikuMapHAlign(halign), EbGuiHaikuMapVAlign(valign))
+END SUB
+
+''' Real HGridLayoutSetColumnWeight/SetRowWeight - independent of which
+''' view(s) occupy that column/row.
+SUB GuiGridSetColumnWeight(gr AS GuiGrid, column AS INTEGER, weight AS SINGLE)
+    DIM realLayout AS HGridLayout
+    realLayout.handle = EbGuiHaikuAssocGet(gr.handle)
+    CALL HGridLayoutSetColumnWeight(realLayout, column, weight)
+END SUB
+
+SUB GuiGridSetRowWeight(gr AS GuiGrid, row AS INTEGER, weight AS SINGLE)
+    DIM realLayout AS HGridLayout
+    realLayout.handle = EbGuiHaikuAssocGet(gr.handle)
+    CALL HGridLayoutSetRowWeight(realLayout, row, weight)
 END SUB
 
 ''' Appends `content` into the window's existing shared content layout
