@@ -1,0 +1,10 @@
+[package]
+name = "gui-haiku"
+version = "0.1.0"
+
+[lib]
+path = "src/lib.bas"
+
+[dependencies]
+gui = { git = "https://github.com/yann64/eb-gui.git" }
+eb-haiku = { git = "https://github.com/yann64/eb-haiku.git" }
