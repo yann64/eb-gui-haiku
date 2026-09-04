@@ -1,11 +1,23 @@
 ' Live example: a GuiBox containing a GuiLabel + GuiEntry + GuiButton -
 ' clicking the button reads the entry's text and updates the label,
 ' via eb-gui's universal Widget/Layout contract (Round 1 widgets/
-' layout + Round 2 constraints). Same shape as eb-gui-gtk4/eb-gui-qt6's
-' own examples/widgets_form. The "Go" button is added with
-' GuiBoxAddChildEx(expand=1.0, GUI_ALIGN_FILL, ...) so it visibly
-' stretches to the box's full width - the visual proof Round 2's
-' per-child weight/alignment actually takes effect on real Haiku.
+' layout + Round 2 constraints + Round 3 min/max size). Same shape as
+' eb-gui-gtk4/eb-gui-qt6's own examples/widgets_form. The "Go" button
+' is added with GuiBoxAddChildEx(expand=1.0, GUI_ALIGN_FILL, ...) so it
+' visibly stretches to the box's full width - the visual proof Round
+' 2's per-child weight/alignment actually takes effect on real Haiku.
+'
+' Round 3's GuiWidgetSetMinSize/SetMaxSize are deliberately NOT
+' demoed visually here: like every real box-layout system (GTK4's
+' hexpand/vexpand, Qt6's stretch factor), min/max size are a floor/
+' ceiling on the space the layout is ALLOWED to allocate, not a growth
+' mechanism by themselves - a min-size'd item with no weight (the case
+' here) just gets clamped up to its floor when squeezed, but doesn't
+' claim leftover slack, so it wouldn't visibly grow in this already-
+' spacious window. eb-haiku's own pre-existing
+' tests/nested_layout_basics.bas pairs HViewSetExplicitMinSize with a
+' nonzero HGroupLayoutSetItemWeight for exactly this reason - see
+' eb-gui's own README for the full explanation.
 
 #include "gui-haiku.iface.bas"
 

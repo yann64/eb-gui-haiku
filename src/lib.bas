@@ -786,6 +786,18 @@ SUB GuiGridSetRowWeight(gr AS GuiGrid, row AS INTEGER, weight AS SINGLE)
     CALL HGridLayoutSetRowWeight(realLayout, row, weight)
 END SUB
 
+''' Direct pass-through to HViewSetExplicitMinSize/MaxSize - both
+''' already real and bound, no prerequisite native work needed this
+''' round (unlike eb-gui-gtk4's own GuiWidgetSetMaxSize, a documented
+''' no-op - real GTK4 has no such API at all).
+SUB GuiWidgetSetMinSize(handle AS ANY PTR, width AS INTEGER, height AS INTEGER)
+    CALL HViewSetExplicitMinSize(handle, width, height)
+END SUB
+
+SUB GuiWidgetSetMaxSize(handle AS ANY PTR, width AS INTEGER, height AS INTEGER)
+    CALL HViewSetExplicitMaxSize(handle, width, height)
+END SUB
+
 ''' Appends `content` into the window's existing shared content layout
 ''' (`EbGuiHaikuContentLayout`) - call after `GuiWindowMenuBar`/
 ''' `GuiWindowToolBar` and before `GuiWindowStatusBar` for the expected

@@ -237,6 +237,30 @@ box width, then fixed by adding the missing real sentinel to
 `SetRowWeight` are real, direct `HGridLayoutSetColumnWeight`/
 `SetRowWeight` pass-throughs.
 
+Round 3 explicit min/max size - needed **zero** prerequisite native
+work (`HViewSetExplicitMinSize`/`MaxSize` already existed):
+
+```basic
+CALL GuiWidgetSetMinSize(entry.handle, 200, 40)
+CALL GuiWidgetSetMaxSize(entry.handle, 400, 40)
+```
+
+`GuiWidgetSetMinSize`/`SetMaxSize` are direct pass-throughs to
+`HViewSetExplicitMinSize`/`MaxSize`. **Real, non-obvious finding from
+this round's own verification** (confirmed via a live screenshot spike,
+not assumed): min/max size are a floor/ceiling on the range the
+LAYOUT is allowed to allocate, not a growth mechanism by themselves -
+exactly like every other real box-layout system (GTK4's hexpand/
+vexpand, Qt6's stretch factor). A min-size'd item with no item weight
+just gets clamped up to its floor when the layout needs to squeeze it,
+but does NOT claim leftover slack space on its own - `eb-haiku`'s own
+pre-existing `tests/nested_layout_basics.bas` already paired
+`HViewSetExplicitMinSize` with a nonzero `HGroupLayoutSetItemWeight`
+for exactly this reason, confirming this is expected, correct behavior
+rather than a defect - pair `GuiWidgetSetMinSize`/`SetMaxSize` with
+`GuiBoxAddChildEx`'s own `expand` parameter (Round 2) if you want a
+constrained item to also visibly grow.
+
 ## Verifying
 
 Real hardware only, over SSH (this package binds `libbe.so`, which
@@ -263,7 +287,8 @@ any more than on `eb-qt6`.
   `GuiBoxAddChildEx`/`GuiGridAttachEx`/`GuiGridSetColumnWeight`/
   `SetRowWeight` (Round 2 constraints) running without crashing with
   correct index tracking across mixed `AddChild`/`AddChildEx` calls,
-  and a `GuiTimer`-driven `GuiApplicationQuit` exiting
+  `GuiWidgetSetMinSize`/`SetMaxSize` (Round 3) running without
+  crashing, and a `GuiTimer`-driven `GuiApplicationQuit` exiting
   `GuiApplicationRun` promptly.
 - `examples/widgets_form.bas` - a `GuiBox` containing a `GuiLabel` +
   `GuiEntry` + `GuiButton`, clicking the button reads the entry and

@@ -188,6 +188,11 @@ CALL GuiBoxAddChild(constraintsBox, constraintsGrid.handle)
 CALL GuiBoxAddChild(widgetsBox, constraintsBox.handle)
 PRINT "Round 2 constraints (GuiBoxAddChildEx/GuiGridAttachEx/GuiGridSetColumnWeight/SetRowWeight) ran without crashing"
 
+' 7. Round 3: explicit min/max size - both real on this backend.
+CALL GuiWidgetSetMinSize(fixedBtn.handle, 200, 40)
+CALL GuiWidgetSetMaxSize(fixedBtn.handle, 300, 60)
+PRINT "Round 3 min/max size (GuiWidgetSetMinSize/SetMaxSize) ran without crashing"
+
 ' 5. GuiTimer, and (via its own callback) GuiApplicationQuit stopping
 ' GuiApplicationRun - the same real running-loop quit proof eb-gtk4/
 ' eb-qt6's own equivalents use.
