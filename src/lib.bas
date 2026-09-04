@@ -1023,3 +1023,75 @@ SUB GuiComboBoxConnectChanged(cb AS GuiComboBox, handler AS ANY PTR, userData AS
         END IF
     NEXT i
 END SUB
+
+''' Real Haiku's actual progress-bar widget (`HStatusBar`, wrapping
+''' `BStatusBar`) has no minimum-value concept at all - `min` in
+''' `GuiProgressBarSetRange` is a documented, accepted no-op here
+''' (matching the "document the loss, don't block the feature"
+''' precedent already established for GTK4's own missing grid weight
+''' and max-size).
+FUNCTION NewGuiProgressBar() AS GuiProgressBar
+    DIM realBar AS HStatusBar
+    realBar = HStatusBarCreate(0, 0, 0, 0, "eb-gui-haiku-progressbar", "", "")
+    DIM result AS GuiProgressBar
+    result.handle = realBar.handle
+    NewGuiProgressBar = result
+END FUNCTION
+
+SUB GuiProgressBarSetRange(pb AS GuiProgressBar, min AS INTEGER, max AS INTEGER)
+    DIM realBar AS HStatusBar
+    realBar.handle = pb.handle
+    CALL HStatusBarSetMaxValue(realBar, max)
+END SUB
+
+FUNCTION GuiProgressBarGetValue(pb AS GuiProgressBar) AS INTEGER
+    DIM realBar AS HStatusBar
+    realBar.handle = pb.handle
+    GuiProgressBarGetValue = HStatusBarCurrentValue(realBar)
+END FUNCTION
+
+SUB GuiProgressBarSetValue(pb AS GuiProgressBar, value AS INTEGER)
+    DIM realBar AS HStatusBar
+    realBar.handle = pb.handle
+    CALL HStatusBarSetTo(realBar, value)
+END SUB
+
+FUNCTION NewGuiSlider(orientation AS INTEGER) AS GuiSlider
+    DIM realSlider AS HSlider
+    realSlider = HSliderCreate(0, 0, 0, 0, "eb-gui-haiku-slider", "", 0, 100, 0)
+    DIM result AS GuiSlider
+    result.handle = realSlider.handle
+    NewGuiSlider = result
+END FUNCTION
+
+SUB GuiSliderSetRange(s AS GuiSlider, min AS INTEGER, max AS INTEGER)
+    DIM realSlider AS HSlider
+    realSlider.handle = s.handle
+    CALL HSliderSetLimits(realSlider, min, max)
+END SUB
+
+FUNCTION GuiSliderGetValue(s AS GuiSlider) AS INTEGER
+    DIM realSlider AS HSlider
+    realSlider.handle = s.handle
+    GuiSliderGetValue = HSliderGetValue(realSlider)
+END FUNCTION
+
+SUB GuiSliderSetValue(s AS GuiSlider, value AS INTEGER)
+    DIM realSlider AS HSlider
+    realSlider.handle = s.handle
+    CALL HSliderSetValue(realSlider, value)
+END SUB
+
+''' Same application-attached `HHandler` mechanism as
+''' `GuiButtonConnectClicked`.
+SUB GuiSliderConnectValueChanged(s AS GuiSlider, handler AS ANY PTR, userData AS ANY PTR)
+    DIM realSlider AS HSlider
+    realSlider.handle = s.handle
+    DIM realApp AS HApplication
+    realApp.handle = ebGuiHaikuAppHandle
+    DIM h AS HHandler
+    h = HHandlerCreate()
+    CALL HApplicationAddHandler(realApp, h)
+    CALL HSliderSetTarget(realSlider, h)
+    CALL HHandlerSetCallback(h, handler, userData)
+END SUB

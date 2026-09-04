@@ -322,6 +322,35 @@ item that exists at call time, so items added afterward won't have it
 (documented, matching this package's own established call-order
 conventions elsewhere, e.g. `GuiWindowSetContent`).
 
+## Widgets (Round 5) - ProgressBar, Slider
+
+`eb-haiku` needed genuinely new native work this round (v0.16.0):
+`HStatusBar` (real Haiku's own progress-bar widget - not to be
+confused with a window's own status bar) and `HSlider` (a real
+`BControl`, same family as `HButton`/`HCheckBox`).
+
+```basic
+DIM pb AS GuiProgressBar
+pb = NewGuiProgressBar()
+CALL GuiProgressBarSetRange(pb, 0, 200)
+CALL GuiProgressBarSetValue(pb, 150)
+
+DIM slider AS GuiSlider
+slider = NewGuiSlider(0)
+CALL GuiSliderSetRange(slider, 0, 200)
+CALL GuiSliderSetValue(slider, 150)
+```
+
+`GuiProgressBarSetRange`'s `min` is a documented, accepted no-op here -
+real `BStatusBar` has no minimum-value concept at all (the implicit
+min is always `0`). `GuiSliderConnectValueChanged` uses the same
+application-attached `HHandler` mechanism as `GuiButtonConnectClicked`.
+
+Verified end-to-end on real Haiku hardware, including a live
+screenshot confirming both widgets render correctly - the progress
+bar's fill and the slider's thumb position both visually matched the
+values set.
+
 ## Verifying
 
 Real hardware only, over SSH (this package binds `libbe.so`, which
@@ -353,7 +382,11 @@ any more than on `eb-qt6`.
   `GuiRadioButton` sibling exclusivity (attached before setting checked
   state)/`GuiComboBoxAddItem`/`GetSelectedIndex`/`SetSelectedIndex`/
   `GetSelectedText`/`ConnectChanged` (Round 4) all round-tripping
-  correctly, and a `GuiTimer`-driven `GuiApplicationQuit` exiting
+  correctly, `GuiProgressBarSetRange`/`SetValue`/`GetValue` and
+  `GuiSliderSetRange`/`SetValue`/`GetValue`/`ConnectValueChanged`
+  (Round 5) round-tripping correctly (plus a separate live screenshot -
+  see above - confirming both render correctly, not just "didn't
+  crash"), and a `GuiTimer`-driven `GuiApplicationQuit` exiting
   `GuiApplicationRun` promptly.
 - `examples/widgets_form.bas` - a `GuiBox` containing a `GuiLabel` +
   `GuiEntry` + `GuiButton`, clicking the button reads the entry and

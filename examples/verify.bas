@@ -235,6 +235,26 @@ CALL GuiBoxAddChild(widgetsBox, radioBox.handle)
 CALL GuiBoxAddChild(widgetsBox, combo.handle)
 PRINT "Round 4 widgets (CheckBox/RadioButton/ComboBox) ran without crashing"
 
+' 9. Round 5: ProgressBar/Slider.
+DIM pb AS GuiProgressBar
+pb = NewGuiProgressBar()
+PRINT "progress bar initial: ", GuiProgressBarGetValue(pb)
+CALL GuiProgressBarSetRange(pb, 0, 200)
+CALL GuiProgressBarSetValue(pb, 150)
+PRINT "progress bar after range 0-200, set 150: ", GuiProgressBarGetValue(pb)
+
+DIM sliderWidget AS GuiSlider
+sliderWidget = NewGuiSlider(0)
+CALL GuiSliderSetRange(sliderWidget, 0, 200)
+CALL GuiSliderSetValue(sliderWidget, 150)
+PRINT "slider after range 0-200, set 150: ", GuiSliderGetValue(sliderWidget)
+CALL GuiSliderConnectValueChanged(sliderWidget, @OnActionTriggered, 0)
+PRINT "slider connect value changed did not crash"
+
+CALL GuiBoxAddChild(widgetsBox, pb.handle)
+CALL GuiBoxAddChild(widgetsBox, sliderWidget.handle)
+PRINT "Round 5 widgets (ProgressBar/Slider) ran without crashing"
+
 ' 5. GuiTimer, and (via its own callback) GuiApplicationQuit stopping
 ' GuiApplicationRun - the same real running-loop quit proof eb-gtk4/
 ' eb-qt6's own equivalents use.
