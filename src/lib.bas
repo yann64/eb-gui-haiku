@@ -1224,3 +1224,20 @@ SUB GuiTextViewSetEditable(tv AS GuiTextView, editable AS INTEGER)
     realView.handle = tv.handle
     CALL HTextViewMakeEditable(realView, editable)
 END SUB
+
+''' A documented, accepted no-op - CONFIRMED via 6 standalone C++
+''' probes directly against real BGroupLayout/BButton on real Haiku
+''' hardware (not assumed from the API's own name or documentation):
+''' real BView::SetExplicitPreferredSize correctly STORES the value
+''' (PreferredSize() reports it back when queried directly), but
+''' BGroupLayout never actually CONSULTS it when computing an item's
+''' real rendered size - not with fill alignment, not with nonzero
+''' weight, not under a forced resize/squeeze, not for the enclosing
+''' window's own auto-sizing. SetExplicitMinSize (GuiWidgetSetMinSize,
+''' Round 3), tested identically, DOES reliably enforce its floor in
+''' every one of those same scenarios - confirming this is a real,
+''' specific gap in how BGroupLayout uses PreferredSize(), not a
+''' mistake in this adapter's own call. See eb-gui's own README for
+''' the full probe writeup.
+SUB GuiWidgetSetPreferredSize(handle AS ANY PTR, width AS INTEGER, height AS INTEGER)
+END SUB

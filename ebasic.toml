@@ -1,6 +1,6 @@
 [package]
 name = "gui-haiku"
-version = "0.7.0"
+version = "0.8.0"
 
 [lib]
 path = "src/lib.bas"

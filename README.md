@@ -423,6 +423,33 @@ screenshot confirming both widgets render correctly - a 3-item list
 box with the 3rd item correctly highlighted as selected, and the text
 view showing its own set text below it.
 
+## Widgets (Round 7) - settable preferred size, a real hardware finding turned no-op
+
+`GuiWidgetSetPreferredSize` was expected to be genuinely real on this
+backend - real `BView::SetExplicitPreferredSize` exists and correctly
+STORES the value (a direct `PreferredSize()` query reports it back
+exactly). **But six standalone C++ probes against a real `BButton`
+inside a real `BGroupLayout` - the exact combination this package's
+own `GuiBox` uses - each showed `BGroupLayout` never actually
+CONSULTS that stored value when computing a child's real rendered
+size**: not with `SetExplicitAlignment` set to fill on both axes, not
+with a nonzero layout weight, not under a forced window resize or a
+genuine squeeze (window smaller than the sum of children's sizes), not
+even in how the enclosing window auto-sizes itself. The identical
+probes run against `SetExplicitMinSize` (already shipped as
+`GuiWidgetSetMinSize`, Round 3) DID reliably enforce their floor in
+every one of those same scenarios, run on the SAME real hardware -
+ruling out a probe-methodology mistake and confirming this is a real,
+specific gap in how `BGroupLayout` itself uses `PreferredSize()`, not
+an error in this adapter's own pass-through call (which was removed -
+this function is now a genuine empty no-op here too, matching
+`eb-gui-gtk4`/`eb-gui-qt6`, rather than a real call that silently does
+nothing observable). See `eb-gui`'s own README for the full writeup.
+This is a real, humbling instance of this project's own established
+discipline: a plausible-sounding capability claim - one that survives
+header inspection AND a direct object-level query - still needs a
+full, decisive behavioral probe before it's safe to ship as "real."
+
 ## Verifying
 
 Real hardware only, over SSH (this package binds `libbe.so`, which
@@ -465,7 +492,10 @@ any more than on `eb-qt6`.
   and a `Clear`-then-re-`AddItem` check confirming the item-text
   tracking table doesn't leak stale text across a clear (plus a
   separate live screenshot - see above - confirming both render
-  correctly) - and a `GuiTimer`-driven `GuiApplicationQuit` exiting
+  correctly) - `GuiWidgetSetPreferredSize` (Round 7) running without
+  crashing (a documented no-op on this backend too - see above; the
+  real behavioral proof there is the six standalone C++ probes, not a
+  screenshot) - and a `GuiTimer`-driven `GuiApplicationQuit` exiting
   `GuiApplicationRun` promptly.
 - `examples/widgets_form.bas` - a `GuiBox` containing a `GuiLabel` +
   `GuiEntry` + `GuiButton`, clicking the button reads the entry and

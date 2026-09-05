@@ -295,6 +295,14 @@ CALL GuiBoxAddChild(widgetsBox, lb.handle)
 CALL GuiBoxAddChild(widgetsBox, tv.handle)
 PRINT "Round 6 widgets (ListBox/TextView) ran without crashing"
 
+' 11. Round 7: settable preferred size - a documented no-op on THIS
+' backend too, same as eb-gui-gtk4/eb-gui-qt6 (confirmed via 6
+' standalone C++ probes against real BGroupLayout/BButton - see
+' eb-gui's own README for the full writeup). "Didn't crash" is the
+' only bar here.
+CALL GuiWidgetSetPreferredSize(goBtn.handle, 200, 60)
+PRINT "Round 7 (GuiWidgetSetPreferredSize) ran without crashing"
+
 ' 5. GuiTimer, and (via its own callback) GuiApplicationQuit stopping
 ' GuiApplicationRun - the same real running-loop quit proof eb-gtk4/
 ' eb-qt6's own equivalents use.
