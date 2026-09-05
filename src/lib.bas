@@ -1241,3 +1241,16 @@ END SUB
 ''' the full probe writeup.
 SUB GuiWidgetSetPreferredSize(handle AS ANY PTR, width AS INTEGER, height AS INTEGER)
 END SUB
+
+''' Direct pass-through to HTextViewConnectTextChanged (eb-haiku
+''' v0.18.0) - NOT the usual HApplicationAddHandler+SetTarget pattern:
+''' real BTextView has no single native notification hook at all (only
+''' two separate protected virtuals, InsertText/DeleteText - see
+''' eb-haiku's own README), so its own ShimTextView subclass forwards
+''' both straight to a plain callback, already self-contained, same
+''' shape as GuiListBoxConnectSelectionChanged's own precedent.
+SUB GuiTextViewConnectTextChanged(tv AS GuiTextView, handler AS ANY PTR, userData AS ANY PTR)
+    DIM realView AS HTextView
+    realView.handle = tv.handle
+    CALL HTextViewConnectTextChanged(realView, handler, userData)
+END SUB

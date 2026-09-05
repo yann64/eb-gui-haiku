@@ -450,6 +450,28 @@ discipline: a plausible-sounding capability claim - one that survives
 header inspection AND a direct object-level query - still needs a
 full, decisive behavioral probe before it's safe to ship as "real."
 
+## Widgets (Round 8) - `GuiTextViewConnectTextChanged`
+
+Direct pass-through to `eb-haiku`'s new `HTextViewConnectTextChanged`
+(v0.18.0) - NOT the usual `HApplicationAddHandler`+`SetTarget`
+mechanism: real `BTextView` has no single native notification hook at
+all (only two separate protected virtuals, `InsertText`/`DeleteText` -
+see `eb-haiku`'s own README), so its own `ShimTextView` subclass
+forwards both straight to a plain callback, already self-contained,
+same shape as `GuiListBoxConnectSelectionChanged`'s own precedent
+(Round 6) - fires synchronously, no `Sleep` needed to observe it.
+
+**A real bug found and fixed while building this round's own
+verification, not a bug in this adapter**: calling `GuiTextViewSetText`
+on a text view already attached to an already-shown window hung
+indefinitely - a real, previously-latent `eb-haiku` bug
+(`eb_haiku_textview_set_text` had no cross-thread lock, the same
+hazard class already fixed for other widgets), never triggered before
+because every prior `HTextView` test only ever called `SetText` on a
+still-detached view. Fixed in `eb-haiku` v0.18.1 (`ViewAutolock`,
+matching existing precedent) - see its own README for the full
+writeup. Not a gap in this package's own pass-through call.
+
 ## Verifying
 
 Real hardware only, over SSH (this package binds `libbe.so`, which
@@ -495,8 +517,12 @@ any more than on `eb-qt6`.
   correctly) - `GuiWidgetSetPreferredSize` (Round 7) running without
   crashing (a documented no-op on this backend too - see above; the
   real behavioral proof there is the six standalone C++ probes, not a
-  screenshot) - and a `GuiTimer`-driven `GuiApplicationQuit` exiting
-  `GuiApplicationRun` promptly.
+  screenshot) - `GuiTextViewConnectTextChanged` (Round 8) firing
+  correctly on a genuine `GuiTextViewSetText` call (count of 2, matching
+  `DeleteText`+`InsertText` for a `SetText` replacing existing content -
+  this exact scenario is what caught `eb-haiku`'s own real
+  cross-thread bug, fixed in v0.18.1, see above) - and a `GuiTimer`-driven
+  `GuiApplicationQuit` exiting `GuiApplicationRun` promptly.
 - `examples/widgets_form.bas` - a `GuiBox` containing a `GuiLabel` +
   `GuiEntry` + `GuiButton`, clicking the button reads the entry and
   updates the label; the `Go` button is added via `GuiBoxAddChildEx`

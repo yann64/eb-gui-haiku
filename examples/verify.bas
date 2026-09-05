@@ -303,6 +303,20 @@ PRINT "Round 6 widgets (ListBox/TextView) ran without crashing"
 CALL GuiWidgetSetPreferredSize(goBtn.handle, 200, 60)
 PRINT "Round 7 (GuiWidgetSetPreferredSize) ran without crashing"
 
+' 12. Round 8: GuiTextViewConnectTextChanged - fires SYNCHRONOUSLY,
+' just like GuiListBoxConnectSelectionChanged (Round 6): both are
+' direct pass-throughs to a self-contained Shim* subclass callback,
+' not the usual HApplicationAddHandler+SetTarget mechanism, so no
+' Sleep is needed to observe it.
+DIM textViewChangedCount AS INTEGER
+textViewChangedCount = 0
+SUB OnTextViewChanged(userData AS ANY PTR)
+    textViewChangedCount = textViewChangedCount + 1
+END SUB
+CALL GuiTextViewConnectTextChanged(tv, @OnTextViewChanged, 0)
+CALL GuiTextViewSetText(tv, "changed!")
+PRINT "text view changed count after SetText: ", textViewChangedCount
+
 ' 5. GuiTimer, and (via its own callback) GuiApplicationQuit stopping
 ' GuiApplicationRun - the same real running-loop quit proof eb-gtk4/
 ' eb-qt6's own equivalents use.
